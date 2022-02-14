@@ -16,4 +16,5 @@
 
   swiftBuilders = pkgs.callPackage ./pkgs/swift-builders { };
   TOMLDecoder = pkgs.callPackage ./pkgs/TOMLDecoder { };
+  Yams = pkgs.callPackage ./pkgs/Yams { };
 }
