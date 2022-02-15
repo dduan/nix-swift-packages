@@ -1,34 +1,24 @@
-{ stdenv, fetchFromGitHub, symlinkJoin, swift }:
+{ pkgs, fetchFromGitHub }:
 { version }:
-let
-  builders = import ../swift-builders { inherit stdenv swift; };
-  package = "TOMLDecoder";
+with import ../swift-builders { inherit pkgs; };
+mkPackage rec {
+  inherit version;
+  name = "TOMLDecoder";
   src = fetchFromGitHub {
     owner = "dduan";
     repo = "TOMLDecoder";
     rev = "${version}";
     sha256 = "sha256-Vk1ALdwjgV/fsep2NwEOYj+rSByeMXj58vf89dGjFK4=";
   };
-in
-  let
-    Deserializer = rec {
+  targets = [
+    {
       name = "Deserializer";
-      path = builders.mkDynamicLibrary {
-        inherit src version package;
-        target = "${name}";
-      };
-    };
-
-    TOMLDecoder = rec {
-      name = "TOMLDecoder";
-      path = builders.mkDynamicLibrary {
-        inherit src version package;
-        target = "${name}";
-        deps = [ Deserializer ];
-      };
-    };
-  in
-    symlinkJoin {
-      name = "swift-${package}-${version}";
-      paths = [ Deserializer.path TOMLDecoder.path ];
+      type = TargetType.Library;
     }
+    {
+      name = "TOMLDecoder";
+      type = TargetType.Library;
+      deps = [ "Deserializer" ];
+    }
+  ];
+}

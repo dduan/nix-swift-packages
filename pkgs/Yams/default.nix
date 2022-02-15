@@ -1,34 +1,23 @@
-{ pkgs ? import <nixpkgs> {}}:
-with pkgs;
-let
+{ pkgs ? import <nixpkgs> {} }:
+with import ../swift-builders { inherit pkgs; };
+mkPackage rec {
+  name = "Yams";
   version = "4.0.6";
-  builders = import ../swift-builders { inherit stdenv swift; };
-  package = "Yams";
-  src = fetchFromGitHub {
+  src = pkgs.fetchFromGitHub {
     owner = "jpsim";
     repo = "Yams";
     rev = "${version}";
     sha256 = "sha256-haysR6hdPF9MWZ0U8KIn3wC3PptvFhVijUroqEfwI6E=";
   };
-in
-  let
-    CYaml = rec {
+  targets = [
+    {
       name = "CYaml";
-      path = builders.mkDynamicCLibrary {
-        inherit src version package;
-        target = name;
-      };
-    };
-    Yams = rec {
-      name = "Yams";
-      path = builders.mkDynamicLibrary {
-        inherit src version package;
-        target = name;
-        deps = [ CYaml ];
-      };
-    };
-  in
-    symlinkJoin {
-      name = "swift-${package}-${version}";
-      paths = [ CYaml.path Yams.path ];
+      type = TargetType.CLibrary;
     }
+    {
+      name = "Yams";
+      type = TargetType.Library;
+      deps = [ "CYaml" ];
+    }
+  ];
+}
