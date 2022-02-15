@@ -2,11 +2,12 @@
 with pkgs;
 let
   depFlags = deps: builtins.concatStringsSep " " (map
-    (dep: "-Xlinker -rpath -Xlinker ${dep.path}/lib -L ${dep.path}/lib -I ${dep.path}/swift")
+    (dep: "-Xlinker -rpath -Xlinker ${dep.path}/lib -L ${dep.path}/lib -I ${dep.path}/swift -Xcc -I${dep.path}/swift")
     deps);
   depSwiftModules = deps: builtins.concatStringsSep " " (map
     (dep: "${dep.path}/swift/${dep.name}.swiftmodule")
     deps);
+  depLibs = deps: builtins.concatStringsSep " " (map (d: "${d.path}/lib/lib${d.name}.so") deps);
   buildInputs = [ swift ];
   phases = [ "unpackPhase" "patchPhase"  "buildPhase" "installPhase" ];
   buildDir = "build";
@@ -24,36 +25,35 @@ in rec {
     version,
     src,
     target,
-    targetSrcRoot ? "Sources/${target}",
+    srcRoot ? "Sources/${target}",
     deps ? [],
     patchPhase ? "",
     extraCompilerFlags ? "",
   }:
   let
-    targetSrcRoot = "Sources/${target}";
-    includeSourceDir = "${targetSrcRoot}/include";
+    includeSourceDir = "${srcRoot}/include";
     includeDir = "${buildDir}/swift";
     libDir = "${buildDir}/lib";
-    binDir = "tmp";
     libName = "lib${target}.so";
+    tmpDir = "tmp";
   in
     stdenv.mkDerivation rec {
       inherit src version patchPhase buildInputs phases installPhase;
-      pname = "swift-${package}-${target}-${version}";
+      pname = "swift-${package}-${target}";
       buildPhase = ''
         mkdir ${buildDir}
         mkdir ${libDir}
-        mkdir ${binDir}
-        for cFile in $(find ${targetSrcRoot} -name "*.c"); do
+        mkdir ${tmpDir}
+        for cFile in $(find ${srcRoot} -name "*.c"); do
           clang \
             -I${includeSourceDir} \
             -O3 \
             -DNDEBUG \
             -fPIC \
             -MD \
-            -MT ${binDir}/$(basename $cFile).o \
-            -MF ${binDir}/$(basename $cFile).o.d \
-            -o ${binDir}/$(basename $cFile).o \
+            -MT ${tmpDir}/$(basename $cFile).o \
+            -MF ${tmpDir}/$(basename $cFile).o.d \
+            -o ${tmpDir}/$(basename $cFile).o \
             -c $cFile \
             ${extraCompilerFlags}
         done
@@ -67,8 +67,9 @@ in rec {
           -shared \
           -Wl,-soname,${libName} \
           -o ${libDir}/${libName} \
-          ${binDir}/*.o \
-          ${extraCompilerFlags}
+          ${tmpDir}/*.o \
+          ${extraCompilerFlags} \
+          ${depLibs deps}
       '';
     };
 
@@ -77,20 +78,19 @@ in rec {
     version,
     src,
     target,
-    targetSrcRoot ? "Sources/${target}",
+    srcRoot ? "Sources/${target}",
     deps ? [],
     patchPhase ? "",
     extraCompilerFlags ? "",
   }:
   let
-    targetSrcRoot = "Sources/${target}";
     includeDir = "${buildDir}/swift";
     libDir = "${buildDir}/lib";
     libName = "lib${target}.so";
   in
     stdenv.mkDerivation rec {
       inherit src version patchPhase buildInputs phases installPhase;
-      pname = "swift-${package}-${target}-${version}";
+      pname = "swift-${package}-${target}";
       buildPhase = ''
         mkdir ${buildDir}
         mkdir ${includeDir}
@@ -110,8 +110,9 @@ in rec {
           ${depFlags deps} \
           -o ${libDir}/${libName} \
           ${extraCompilerFlags} \
-          $(find ${targetSrcRoot} -name '*.swift') \
-          ${depSwiftModules deps}
+          $(find ${srcRoot} -name '*.swift') \
+          ${depSwiftModules deps} \
+          ${depLibs deps}
         '';
     };
 
@@ -119,19 +120,18 @@ in rec {
     version,
     src,
     target,
-    targetSrcRoot ? "Sources/${target}",
+    srcRoot ? "Sources/${target}",
     executableName ? target,
     deps ? [],
     patchPhase ? "",
     extraCompilerFlags ? "",
   }:
   let
-    targetSrcRoot = "Sources/${target}";
     binDir = "${buildDir}/bin";
   in
     stdenv.mkDerivation rec {
       inherit src version patchPhase buildInputs phases installPhase;
-      pname = "${executableName}-${version}";
+      pname = "${executableName}";
       buildPhase = ''
         mkdir ${buildDir}
         mkdir ${binDir}
@@ -140,8 +140,9 @@ in rec {
           ${depFlags deps} \
           -o ${binDir}/${executableName} \
           ${extraCompilerFlags} \
-          $(find ${targetSrcRoot} -name '*.swift') \
-          ${depSwiftModules deps}
+          $(find ${srcRoot} -name '*.swift') \
+          ${depSwiftModules deps} \
+          ${depLibs deps}
         '';
     }
   ;
@@ -150,6 +151,7 @@ in rec {
     name,
     version,
     src,
+    dependencies ? {},
     targets,
   }:
     let
@@ -159,21 +161,21 @@ in rec {
           target = attrs.name;
           patchPhase = if attrs?patchPhase then attrs.patchPhase else "";
           extraCompilerFlags = if attrs?extraCompilerFlags then attrs.extraCompilerFlags else "";
-          targetSrcRoot = "Sources/${target}";
+          srcRoot = if attrs?srcRoot then attrs.srcRoot else "Sources/${target}";
         in
           if attrs.type == TargetType.CLibrary then
             mkDynamicCLibrary {
-              inherit version src deps target targetSrcRoot patchPhase extraCompilerFlags;
+              inherit version src deps target srcRoot patchPhase extraCompilerFlags;
               package = name;
             }
           else if attrs.type == TargetType.Library then
             mkDynamicLibrary {
-              inherit version src deps target targetSrcRoot patchPhase extraCompilerFlags;
+              inherit version src deps target srcRoot patchPhase extraCompilerFlags;
               package = name;
             }
           else if attrs.type == TargetType.Executable then
             mkExecutable {
-              inherit version src deps target targetSrcRoot patchPhase extraCompilerFlags;
+              inherit version src deps target srcRoot patchPhase extraCompilerFlags;
             }
           else
             throw "Unknown target type ${attrs.type}"
@@ -197,7 +199,7 @@ in rec {
     in
       symlinkJoin {
         name = "swift-${name}-${version}";
-        paths = builtins.attrValues (buildTargets targets {});
+        paths = builtins.attrValues (buildTargets targets dependencies);
       }
   ;
 }
