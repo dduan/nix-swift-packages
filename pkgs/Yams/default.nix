@@ -1,4 +1,4 @@
-{ pkgs ? import <nixpkgs> {} }:
+{ pkgs }:
 with import ../swift-builders { inherit pkgs; };
 mkPackage rec {
   name = "Yams";
