@@ -24,13 +24,14 @@ in rec {
     version,
     src,
     target,
+    targetSrcRoot ? "Sources/${target}",
     deps ? [],
     patchPhase ? "",
     extraCompilerFlags ? "",
   }:
   let
-    sourceDir = "Sources/${target}";
-    includeSourceDir = "${sourceDir}/include";
+    targetSrcRoot = "Sources/${target}";
+    includeSourceDir = "${targetSrcRoot}/include";
     includeDir = "${buildDir}/swift";
     libDir = "${buildDir}/lib";
     binDir = "tmp";
@@ -43,7 +44,7 @@ in rec {
         mkdir ${buildDir}
         mkdir ${libDir}
         mkdir ${binDir}
-        for cFile in $(find ${sourceDir} -name "*.c"); do
+        for cFile in $(find ${targetSrcRoot} -name "*.c"); do
           clang \
             -I${includeSourceDir} \
             -O3 \
@@ -76,12 +77,13 @@ in rec {
     version,
     src,
     target,
+    targetSrcRoot ? "Sources/${target}",
     deps ? [],
     patchPhase ? "",
     extraCompilerFlags ? "",
   }:
   let
-    sourceDir = "Sources/${target}";
+    targetSrcRoot = "Sources/${target}";
     includeDir = "${buildDir}/swift";
     libDir = "${buildDir}/lib";
     libName = "lib${target}.so";
@@ -108,7 +110,7 @@ in rec {
           ${depFlags deps} \
           -o ${libDir}/${libName} \
           ${extraCompilerFlags} \
-          $(find ${sourceDir} -name '*.swift') \
+          $(find ${targetSrcRoot} -name '*.swift') \
           ${depSwiftModules deps}
         '';
     };
@@ -117,13 +119,14 @@ in rec {
     version,
     src,
     target,
+    targetSrcRoot ? "Sources/${target}",
     executableName ? target,
     deps ? [],
     patchPhase ? "",
     extraCompilerFlags ? "",
   }:
   let
-    sourceDir = "Sources/${target}";
+    targetSrcRoot = "Sources/${target}";
     binDir = "${buildDir}/bin";
   in
     stdenv.mkDerivation rec {
@@ -137,7 +140,7 @@ in rec {
           ${depFlags deps} \
           -o ${binDir}/${executableName} \
           ${extraCompilerFlags} \
-          $(find ${sourceDir} -name '*.swift') \
+          $(find ${targetSrcRoot} -name '*.swift') \
           ${depSwiftModules deps}
         '';
     }
@@ -156,20 +159,21 @@ in rec {
           target = attrs.name;
           patchPhase = if attrs?patchPhase then attrs.patchPhase else "";
           extraCompilerFlags = if attrs?extraCompilerFlags then attrs.extraCompilerFlags else "";
+          targetSrcRoot = "Sources/${target}";
         in
           if attrs.type == TargetType.CLibrary then
             mkDynamicCLibrary {
-              inherit version src deps target patchPhase extraCompilerFlags;
+              inherit version src deps target targetSrcRoot patchPhase extraCompilerFlags;
               package = name;
             }
           else if attrs.type == TargetType.Library then
             mkDynamicLibrary {
-              inherit version src deps target patchPhase extraCompilerFlags;
+              inherit version src deps target targetSrcRoot patchPhase extraCompilerFlags;
               package = name;
             }
           else if attrs.type == TargetType.Executable then
             mkExecutable {
-              inherit version src deps target patchPhase extraCompilerFlags;
+              inherit version src deps target targetSrcRoot patchPhase extraCompilerFlags;
             }
           else
             throw "Unknown target type ${attrs.type}"
