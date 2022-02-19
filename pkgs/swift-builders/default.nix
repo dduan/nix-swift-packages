@@ -1,15 +1,16 @@
-{ pkgs }:
-with pkgs;
-let
-  depFlags = deps: builtins.concatStringsSep " " (map
+{pkgs}:
+with pkgs; let
+  depFlags = deps:
+    builtins.concatStringsSep " " (map
     (dep: "-Xlinker -rpath -Xlinker ${dep.path}/lib -L ${dep.path}/lib -I ${dep.path}/swift -Xcc -I${dep.path}/swift")
     deps);
-  depSwiftModules = deps: builtins.concatStringsSep " " (map
+  depSwiftModules = deps:
+    builtins.concatStringsSep " " (map
     (dep: "${dep.path}/swift/${dep.name}.swiftmodule")
     deps);
   depLibs = deps: builtins.concatStringsSep " " (map (d: "${d.path}/lib/lib${d.name}.so") deps);
-  buildInputs = [ swift ];
-  phases = [ "unpackPhase" "patchPhase"  "buildPhase" "installPhase" ];
+  buildInputs = [swift];
+  phases = ["unpackPhase" "patchPhase" "buildPhase" "installPhase"];
   buildDir = "build";
   installPhase = ''
     mv ${buildDir} $out
@@ -29,8 +30,7 @@ in rec {
     deps ? [],
     patchPhase ? "",
     extraCompilerFlags ? "",
-  }:
-  let
+  }: let
     includeSourceDir = "${srcRoot}/include";
     includeDir = "${buildDir}/swift";
     libDir = "${buildDir}/lib";
@@ -82,8 +82,7 @@ in rec {
     deps ? [],
     patchPhase ? "",
     extraCompilerFlags ? "",
-  }:
-  let
+  }: let
     includeDir = "${buildDir}/swift";
     libDir = "${buildDir}/lib";
     libName = "lib${target}.so";
@@ -113,7 +112,7 @@ in rec {
           $(find ${srcRoot} -name '*.swift') \
           ${depSwiftModules deps} \
           ${depLibs deps}
-        '';
+      '';
     };
 
   mkExecutable = {
@@ -125,8 +124,7 @@ in rec {
     deps ? [],
     patchPhase ? "",
     extraCompilerFlags ? "",
-  }:
-  let
+  }: let
     binDir = "${buildDir}/bin";
   in
     stdenv.mkDerivation rec {
@@ -143,9 +141,8 @@ in rec {
           $(find ${srcRoot} -name '*.swift') \
           ${depSwiftModules deps} \
           ${depLibs deps}
-        '';
-    }
-  ;
+      '';
+    };
 
   mkPackage = {
     name,
@@ -153,53 +150,66 @@ in rec {
     src,
     dependencies ? {},
     targets,
-  }:
-    let
-      buildTarget = attrs: built:
-        let
-          deps = if attrs?deps then map (d: { name = d; path = built."${d}"; }) attrs.deps else [];
-          target = attrs.name;
-          patchPhase = if attrs?patchPhase then attrs.patchPhase else "";
-          extraCompilerFlags = if attrs?extraCompilerFlags then attrs.extraCompilerFlags else "";
-          srcRoot = if attrs?srcRoot then attrs.srcRoot else "Sources/${target}";
-        in
-          if attrs.type == TargetType.CLibrary then
-            mkDynamicCLibrary {
-              inherit version src deps target srcRoot patchPhase extraCompilerFlags;
-              package = name;
-            }
-          else if attrs.type == TargetType.Library then
-            mkDynamicLibrary {
-              inherit version src deps target srcRoot patchPhase extraCompilerFlags;
-              package = name;
-            }
-          else if attrs.type == TargetType.Executable then
-            mkExecutable {
-              inherit version src deps target srcRoot patchPhase extraCompilerFlags;
-            }
-          else
-            throw "Unknown target type ${attrs.type}"
-      ;
-
-      buildTargets = targets: built:
-        let
-          targetCount = builtins.length targets;
-        in
-          if targetCount == 0 then
-            throw "target list must not be empty"
-          else let
-            attrs = builtins.head targets;
-            newlyBuilt = built // { "${attrs.name}" = (buildTarget attrs built); };
-          in
-            if targetCount > 1 then
-              buildTargets (builtins.tail targets) newlyBuilt
-            else
-              newlyBuilt
-      ;
+  }: let
+    buildTarget = attrs: built: let
+      deps =
+        if attrs ? deps
+        then
+          map (d: {
+            name = d;
+            path = built."${d}";
+          })
+          attrs.deps
+        else [];
+      target = attrs.name;
+      patchPhase =
+        if attrs ? patchPhase
+        then attrs.patchPhase
+        else "";
+      extraCompilerFlags =
+        if attrs ? extraCompilerFlags
+        then attrs.extraCompilerFlags
+        else "";
+      srcRoot =
+        if attrs ? srcRoot
+        then attrs.srcRoot
+        else "Sources/${target}";
     in
-      symlinkJoin {
-        name = "swift-${name}-${version}";
-        paths = builtins.attrValues (buildTargets targets dependencies);
-      }
-  ;
+      if attrs.type == TargetType.CLibrary
+      then
+        mkDynamicCLibrary {
+          inherit version src deps target srcRoot patchPhase extraCompilerFlags;
+          package = name;
+        }
+      else if attrs.type == TargetType.Library
+      then
+        mkDynamicLibrary {
+          inherit version src deps target srcRoot patchPhase extraCompilerFlags;
+          package = name;
+        }
+      else if attrs.type == TargetType.Executable
+      then
+        mkExecutable {
+          inherit version src deps target srcRoot patchPhase extraCompilerFlags;
+        }
+      else throw "Unknown target type ${attrs.type}";
+
+    buildTargets = targets: built: let
+      targetCount = builtins.length targets;
+    in
+      if targetCount == 0
+      then throw "target list must not be empty"
+      else
+        let
+          attrs = builtins.head targets;
+          newlyBuilt = built // {"${attrs.name}" = (buildTarget attrs built);};
+        in
+          if targetCount > 1
+          then buildTargets (builtins.tail targets) newlyBuilt
+          else newlyBuilt;
+  in
+    symlinkJoin {
+      name = "swift-${name}-${version}";
+      paths = builtins.attrValues (buildTargets targets dependencies);
+    };
 }
