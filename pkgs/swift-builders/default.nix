@@ -11,10 +11,16 @@ with pkgs; let
   depLibs = deps: builtins.concatStringsSep " " (map (d: "${d.path}/lib/lib${d.name}.so") deps);
   buildInputs = [swift];
   phases = ["unpackPhase" "patchPhase" "buildPhase" "installPhase"];
-  buildDir = "build";
   installPhase = ''
-    mv ${buildDir} $out
+    mv ${dirs.build} $out
   '';
+  dirs = {
+    build = "build";
+    bin = "${dirs.build}/bin";
+    lib = "${dirs.build}/lib";
+    include = "${dirs.build}/swift";
+    tmp = "tmp";
+  };
 in rec {
   TargetType = {
     CLibrary = "CLibrary";
@@ -32,18 +38,15 @@ in rec {
     extraCompilerFlags ? "",
   }: let
     includeSourceDir = "${srcRoot}/include";
-    includeDir = "${buildDir}/swift";
-    libDir = "${buildDir}/lib";
     libName = "lib${target}.so";
-    tmpDir = "tmp";
   in
     stdenv.mkDerivation rec {
       inherit src version patchPhase buildInputs phases installPhase;
       pname = "swift-${package}-${target}";
       buildPhase = ''
-        mkdir ${buildDir}
-        mkdir ${libDir}
-        mkdir ${tmpDir}
+        mkdir ${dirs.build}
+        mkdir ${dirs.lib}
+        mkdir ${dirs.tmp}
         for cFile in $(find ${srcRoot} -name "*.c"); do
           clang \
             -I${includeSourceDir} \
@@ -51,14 +54,14 @@ in rec {
             -DNDEBUG \
             -fPIC \
             -MD \
-            -MT ${tmpDir}/$(basename $cFile).o \
-            -MF ${tmpDir}/$(basename $cFile).o.d \
-            -o ${tmpDir}/$(basename $cFile).o \
+            -MT ${dirs.tmp}/$(basename $cFile).o \
+            -MF ${dirs.tmp}/$(basename $cFile).o.d \
+            -o ${dirs.tmp}/$(basename $cFile).o \
             -c $cFile \
             ${extraCompilerFlags}
         done
 
-        cp -r ${includeSourceDir} ${includeDir}
+        cp -r ${includeSourceDir} ${dirs.include}
 
         clang \
           -fPIC \
@@ -66,8 +69,8 @@ in rec {
           -DNDEBUG \
           -shared \
           -Wl,-soname,${libName} \
-          -o ${libDir}/${libName} \
-          ${tmpDir}/*.o \
+          -o ${dirs.lib}/${libName} \
+          ${dirs.tmp}/*.o \
           ${extraCompilerFlags} \
           ${depLibs deps}
       '';
@@ -83,31 +86,29 @@ in rec {
     patchPhase ? "",
     extraCompilerFlags ? "",
   }: let
-    includeDir = "${buildDir}/swift";
-    libDir = "${buildDir}/lib";
     libName = "lib${target}.so";
   in
     stdenv.mkDerivation rec {
       inherit src version patchPhase buildInputs phases installPhase;
       pname = "swift-${package}-${target}";
       buildPhase = ''
-        mkdir ${buildDir}
-        mkdir ${includeDir}
-        mkdir ${libDir}
+        mkdir ${dirs.build}
+        mkdir ${dirs.include}
+        mkdir ${dirs.lib}
         swiftc \
           -emit-library \
           -module-name ${target} \
           -module-link-name ${target} \
           -emit-module \
-          -emit-module-path "${includeDir}/${target}.swiftmodule" \
+          -emit-module-path "${dirs.include}/${target}.swiftmodule" \
           -emit-dependencies \
           -DSWIFT_PACKAGE \
           -O \
           -enable-testing \
           -Xlinker -soname -Xlinker ${libName} \
-          -Xlinker -rpath -Xlinker ${libDir} \
+          -Xlinker -rpath -Xlinker ${dirs.lib} \
           ${depFlags deps} \
-          -o ${libDir}/${libName} \
+          -o ${dirs.lib}/${libName} \
           ${extraCompilerFlags} \
           $(find ${srcRoot} -name '*.swift') \
           ${depSwiftModules deps} \
@@ -124,19 +125,17 @@ in rec {
     deps ? [],
     patchPhase ? "",
     extraCompilerFlags ? "",
-  }: let
-    binDir = "${buildDir}/bin";
-  in
+  }:
     stdenv.mkDerivation rec {
       inherit src version patchPhase buildInputs phases installPhase;
       pname = "${executableName}";
       buildPhase = ''
-        mkdir ${buildDir}
-        mkdir ${binDir}
+        mkdir ${dirs.build}
+        mkdir ${dirs.bin}
         swiftc \
           -emit-executable \
           ${depFlags deps} \
-          -o ${binDir}/${executableName} \
+          -o ${dirs.bin}/${executableName} \
           ${extraCompilerFlags} \
           $(find ${srcRoot} -name '*.swift') \
           ${depSwiftModules deps} \
